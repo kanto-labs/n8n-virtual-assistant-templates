@@ -1,0 +1,192 @@
+{
+  "name": "Weekly client status report from a Google Sheets task board",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Weekly client status report\nEvery Friday afternoon this reads a simple task board in Google Sheets and emails the client a tidy update: what got done this week, what is in progress (overdue items flagged), and what is blocked waiting on them.\n\n**Who it is for:** virtual assistants, freelancers and small agencies who report to clients weekly.\n\n### Setup (5 minutes)\n1. Make a sheet with a `Tasks` tab and these columns: `Task`, `Client`, `Status` (To Do / In Progress / Blocked / Done), `Priority`, `Owner`, `Due`, `Completed On`, `Notes`. Dates as YYYY-MM-DD.\n2. **Read task board**: connect Google Sheets and pick the sheet + tab.\n3. **Email the client**: connect Gmail.\n4. **Settings**: client name, recipients, your name. Optional: `clientFilter` to report on one client when the board holds several.\n5. Activate.\n\nA ready-made task board, time tracker + invoice sheet and 6 more client-ops templates: https://kantolabs.pages.dev/services/",
+        "height": 600,
+        "width": 420,
+        "color": 4
+      },
+      "id": "7aef3696-f5c0-599e-b4a2-b070602344bb",
+      "name": "About this template",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 16 * * 5"
+            }
+          ]
+        }
+      },
+      "id": "3a7c8b5f-69b2-5b9d-8abe-b2ceeeef6f21",
+      "name": "Every Friday 16:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f6b2cfb8-3ede-557b-8f52-cb3fb939eaff",
+              "name": "clientName",
+              "value": "Client Business",
+              "type": "string"
+            },
+            {
+              "id": "5159e66a-fd09-578b-89eb-3848a291d07e",
+              "name": "clientFilter",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "29eb595a-87d6-52f1-a542-0c8f468aedc6",
+              "name": "recipients",
+              "value": "client@example.com",
+              "type": "string"
+            },
+            {
+              "id": "a5cd4f58-26ee-545b-894e-2252b5bafd74",
+              "name": "yourName",
+              "value": "Your Name",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "f0e09b2f-984e-5286-977f-4fa98768bf9d",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "73038dd3-5486-5ffb-a74b-0f3ec4846a17",
+      "name": "Read task board",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $('Settings').first().json;\nconst DAY = 86400000;\nconst today = new Date(); today.setHours(0, 0, 0, 0);\nconst weekAgo = today.getTime() - 6 * DAY;\nconst toDate = (v) => { if (v === '' || v === null || v === undefined) return null; const d = typeof v === 'number' ? new Date(Math.round((v - 25569) * DAY)) : new Date(String(v).trim()); return isNaN(d) ? null : d; };\nconst esc = (x) => String(x || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');\nconst f = String(s.clientFilter || '').trim().toLowerCase();\nconst tasks = $input.all().map(i => i.json).filter(t => t.Task && (!f || String(t.Client || '').toLowerCase() === f));\nconst st = (t) => String(t.Status || '').trim().toLowerCase();\nconst done = tasks.filter(t => st(t) === 'done' && toDate(t['Completed On']) && toDate(t['Completed On']).getTime() >= weekAgo);\nconst prog = tasks.filter(t => st(t) === 'in progress');\nconst blocked = tasks.filter(t => st(t) === 'blocked');\nconst li = (t, extra) => `<li>${esc(t.Task)}${extra ? ' <span style=\"color:#666\">' + extra + '</span>' : ''}</li>`;\nconst sec = (title, arr, fn) => `<h3 style=\"margin:18px 0 6px;font-size:15px\">${title} (${arr.length})</h3>` + (arr.length ? `<ul>${arr.map(fn).join('')}</ul>` : '<p style=\"color:#666\">None.</p>');\nconst html = `<p>Hi,</p><p>Here is this week's update for <b>${esc(s.clientName)}</b>.</p>` +\n  sec('Done this week', done, t => li(t)) +\n  sec('In progress', prog, t => { const d = toDate(t.Due); return li(t, d ? (d < today ? '<b style=\"color:#c0392b\">overdue, was due ' + d.toISOString().slice(0,10) + '</b>' : 'due ' + d.toISOString().slice(0,10)) : ''); }) +\n  sec('Blocked / waiting on you', blocked, t => li(t, esc(t.Notes))) +\n  `<p>Reply to this email if priorities have changed.</p><p>${esc(s.yourName)}</p>`;\nreturn [{ json: { to: s.recipients, subject: `Weekly update: ${s.clientName} (${done.length} done, ${blocked.length} waiting on you)`, html } }];"
+      },
+      "id": "18be8e93-7f50-5fbc-b935-5a866a414d57",
+      "name": "Build status report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "10732932-1d38-5c2b-8abe-33cfeff435ca",
+      "name": "Email the client",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Friday 16:00": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Read task board",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read task board": {
+      "main": [
+        [
+          {
+            "node": "Build status report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build status report": {
+      "main": [
+        [
+          {
+            "node": "Email the client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

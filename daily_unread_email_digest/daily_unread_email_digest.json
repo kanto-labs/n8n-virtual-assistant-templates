@@ -1,0 +1,190 @@
+{
+  "name": "Daily unread-email digest for virtual assistants (Gmail)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Daily unread-email digest\nEvery morning this sends ONE email that lists yesterday's unread messages, grouped by sender, with the ones that look urgent (keywords you choose) at the top.\n\n**Who it is for:** virtual assistants and executive assistants who triage a client's inbox, and busy owners who want a 1-minute overview instead of 60 notifications.\n\n### Setup (5 minutes)\n1. **Get unread emails**: connect the Gmail account to scan.\n2. **Send the digest**: connect the Gmail account that sends it (can be the same).\n3. **Settings**: who receives the digest, urgent keywords, and the time window.\n4. Change the time in **Every morning 7:30** if needed, then activate.\n\nNothing is marked as read and nothing is deleted.\n\nMore VA automations (lead intake, invoice chasing, onboarding, review requests...): https://kantolabs.pages.dev/services/",
+        "height": 560,
+        "width": 420,
+        "color": 4
+      },
+      "id": "40e0fb65-1c2d-54fb-ac3b-8042bc14c546",
+      "name": "About this template",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "763dc6b4-4a8f-5b72-bca9-7fde080dcd93",
+      "name": "Every morning 7:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6ecfff1a-bb83-5957-afae-32347a517832",
+              "name": "digestTo",
+              "value": "you@example.com",
+              "type": "string"
+            },
+            {
+              "id": "af73a81a-8bef-548c-b5a9-cfbed63349e4",
+              "name": "inboxLabel",
+              "value": "Client inbox",
+              "type": "string"
+            },
+            {
+              "id": "959f6765-fee2-57fb-9e6b-906be572324b",
+              "name": "urgentWords",
+              "value": "urgent, asap, today, deadline, invoice, payment, overdue, refund, complaint",
+              "type": "string"
+            },
+            {
+              "id": "63cd3e34-26df-51ea-8f01-3ff26f9b8714",
+              "name": "searchQuery",
+              "value": "is:unread newer_than:1d -category:promotions -category:social",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "ddd7b22b-a3bb-5285-84c1-9435ce323aef",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 100,
+        "simple": true,
+        "filters": {
+          "q": "={{ $json.searchQuery }}"
+        }
+      },
+      "id": "62a029fe-5598-5717-bf83-6d252f6732e9",
+      "name": "Get unread emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        440,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $('Settings').first().json;\nconst urgent = String(s.urgentWords || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);\nconst mails = $input.all().map(i => i.json).filter(m => m.id);\nconst esc = (x) => String(x || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst rows = mails.map(m => {\n  const from = m.From || (m.from && (m.from.text || m.from)) || '';\n  const subject = m.Subject || m.subject || '(no subject)';\n  const snippet = m.snippet || '';\n  const hay = (subject + ' ' + snippet).toLowerCase();\n  return { from: String(from), subject, snippet, isUrgent: urgent.some(w => hay.includes(w)),\n           link: `https://mail.google.com/mail/u/0/#all/${m.id}` };\n});\nrows.sort((a, b) => (b.isUrgent - a.isUrgent) || a.from.localeCompare(b.from));\nconst line = (r) => `<li style=\"margin-bottom:6px\">${r.isUrgent ? '<b style=\"color:#c0392b\">[!]</b> ' : ''}<a href=\"${r.link}\">${esc(r.subject)}</a><br><span style=\"color:#666\">${esc(r.from)} - ${esc(r.snippet).slice(0, 140)}</span></li>`;\nconst nUrgent = rows.filter(r => r.isUrgent).length;\nconst html = rows.length\n  ? `<p><b>${rows.length} unread</b> in ${esc(s.inboxLabel)} (${nUrgent} look urgent).</p><ol style=\"padding-left:18px\">${rows.map(line).join('')}</ol>`\n  : `<p>No unread email in ${esc(s.inboxLabel)} for this period.</p>`;\nreturn [{ json: { to: s.digestTo, subject: `${s.inboxLabel}: ${rows.length} unread, ${nUrgent} urgent`, html } }];"
+      },
+      "id": "b2db5416-1162-5f09-acbf-b1c6bec3999c",
+      "name": "Build digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7651211b-ce98-5903-98ee-164baff29466",
+      "name": "Send the digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every morning 7:30": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Get unread emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get unread emails": {
+      "main": [
+        [
+          {
+            "node": "Build digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest": {
+      "main": [
+        [
+          {
+            "node": "Send the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
